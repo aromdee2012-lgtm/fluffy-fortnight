@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>WIND BRAWL 2 — Cat & Dog Style Artillery</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;background:#101827;color:#fff;font-family:system-ui,Tahoma,sans-serif;overflow:hidden}
+#app{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+#game{position:relative;width:min(1200px,100vw);height:min(720px,100vh);overflow:hidden;background:#8bd5ff}
+canvas{width:100%;height:100%;display:block;touch-action:none}
+.panel{position:absolute;background:#07111dcc;border:1px solid #ffffff33;border-radius:14px;backdrop-filter:blur(5px);box-shadow:0 8px 30px #0005}
+#top{left:12px;right:12px;top:10px;padding:9px 12px;display:grid;grid-template-columns:1fr 190px 1fr;gap:12px;align-items:center;pointer-events:none}
+.player{display:flex;align-items:center;gap:9px;font-weight:800}.player.right{justify-content:flex-end}
+.avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:23px;background:#ffffff22}
+.hp{height:15px;flex:1;min-width:70px;background:#111;border-radius:10px;overflow:hidden;border:1px solid #fff5}.bar{height:100%;transition:.2s}.blue{background:#2dd4bf}.red{background:#fb7185}
+#center{text-align:center;font-weight:900}.wind{font-size:14px;color:#fde68a}.turn{font-size:13px}
+#controls{left:12px;right:12px;bottom:10px;padding:9px;display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+button,select{border:0;border-radius:10px;padding:9px 12px;font-weight:800;background:#fff;color:#172033;cursor:pointer}
+button:active{transform:translateY(1px)}button.special{background:#fbbf24}
+#powerWrap{position:absolute;left:50%;bottom:84px;transform:translateX(-50%);width:min(360px,60vw);display:none;text-align:center;font-size:12px;font-weight:800}
+#power{height:18px;border:2px solid #fff;border-radius:12px;overflow:hidden;background:#111;margin-top:4px}
+#powerFill{height:100%;width:0;background:linear-gradient(90deg,#34d399,#facc15,#f43f5e)}
+#itemInfo{position:absolute;right:14px;top:84px;padding:8px 12px;font-size:13px;display:none}
+#help{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,90vw);padding:22px;text-align:center;z-index:5}
+#help h1{margin:0 0 7px;font-size:30px}.small{opacity:.8;font-size:13px;line-height:1.5}
+#message{position:absolute;left:50%;top:22%;transform:translateX(-50%);font-size:20px;font-weight:900;text-shadow:0 2px 5px #000;pointer-events:none}
+#stage{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font-size:12px;opacity:.8}
+@media(max-width:650px){#top{grid-template-columns:1fr 120px 1fr;padding:6px}.avatar{width:30px;height:30px}.player{font-size:12px}.hp{min-width:45px}.panel{border-radius:10px}#controls{bottom:5px}.hideMob{display:none}}
+</style>
+</head>
+<body>
+<div id="app"><div id="game">
+<canvas id="c"></canvas>
+
+<div id="top" class="panel">
+  <div class="player"><div class="avatar">🐱</div><span id="p1name">CAT</span><div class="hp"><div id="hp1" class="bar blue" style="width:100%"></div></div></div>
+  <div id="center"><div class="wind" id="wind">WIND → 0</div><div class="turn" id="turn">CAT'S TURN</div></div>
+  <div class="player right"><div class="hp"><div id="hp2" class="bar red" style="width:100%"></div></div><span id="p2name">DOG</span><div class="avatar">🐶</div></div>
+</div>
+
+<div id="itemInfo" class="panel"></div>
+<div id="message"></div>
+<div id="stage">STAGE 1</div>
+
+<div id="powerWrap">POWER <div id="power"><div id="powerFill"></div></div></div>
+
+<div id="controls" class="panel">
+  <select id="item">
+    <option value="rock">🪨 Rock — 18 dmg</option>
+    <option value="can">🥫 Can — 12 dmg</option>
+    <option value="bomb">💣 Bomb — 28 dmg + splash</option>
+    <option value="boomer">🪃 Boomerang — 16 dmg</option>
+    <option value="ice">❄️ Ice — 14 dmg + slow</option>
+  </select>
+  <button id="windBtn">🎲 New Wind</button>
+  <button id="special" class="special">⚡ POWER SHOT</button>
+  <button id="sound">🔊 SOUND ON</button>
+  <button id="restart">↻ RESTART</button>
+</div>
+
+<div id="help" class="panel">
+  <h1>WIND BRAWL 2</h1>
+  <div>เกมยิงผลัดกันแบบ Artillery — 2 ผู้เล่น</div>
+  <p class="small">ลากจากตัวละครเพื่อเล็ง แล้วปล่อยเพื่อยิง<br>
+  ปรับแรงด้วยระยะลาก • ลมมีผลต่อวิถี • เลือกสิ่งของ • ใช้ POWER SHOT<br>
+  รองรับเมาส์และหน้าจอสัมผัส</p>
+  <button id="start">▶ เริ่มเกม</button>
+</div>
+</div></div>
+
+<script>
+const C=document.getElementById('c'),ctx=C.getContext('2d');
+const G=document.getElementById('game');
+let W,H,dpr;
+const ui={
+ hp1:document.getElementById('hp1'),hp2:document.getElementById('hp2'),
+ wind:document.getElementById('wind'),turn:document.getElementById('turn'),
+ power:document.getElementById('powerWrap'),pf:document.getElementById('powerFill'),
+ item:document.getElementById('item'),msg:document.getElementById('message'),
+ stage:document.getElementById('stage'),info:document.getElementById('itemInfo')
+};
+let P,terrain=[],ball=null,turn=0,drag=false,aim={x:0,y:0},wind=0;
+let stage=0,gameStarted=false,gameOver=false,particles=[],shake=0,soundOn=true,powerShot=false;
+let audioCtx=null;
+
+const stages=[
+ {name:'GREEN VALLEY',sky:['#6fc9ff','#d9f4ff'],ground:'#6faa55',wall:0.52},
+ {name:'SUNSET YARD',sky:['#f39b74','#ffd6a5'],ground:'#7c914f',wall:0.44},
+ {name:'MOON BASE',sky:['#1d2950','#6477a5'],ground:'#4f5f54',wall:0.58},
+ {name:'DESERT STORM',sky:['#e8b56d','#f7e2b0'],ground:'#b88a54',wall:0.48}
+];
+const items={
+ rock:{name:'Rock',dmg:18,color:'#9ca3af',mass:1},
+ can:{name:'Can',dmg:12,color:'#d1d5db',mass:.8},
+ bomb:{name:'Bomb',dmg:28,color:'#171717',mass:1.15,splash:true},
+ boomer:{name:'Boomerang',dmg:16,color:'#f59e0b',mass:.9,returning:true},
+ ice:{name:'Ice',dmg:14,color:'#67e8f9',mass:.85,slow:true}
+};
+
+function resize(){
+ dpr=Math.min(devicePixelRatio||1,2); W=G.clientWidth;H=G.clientHeight;
+ C.width=W*dpr;C.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+ layout();
+}
+function layout(){
+ let gy=H*.75;
+ P=[{x:W*.16,y:gy-10,hp:100,side:1,name:'CAT',emoji:'🐱'},
+    {x:W*.84,y:gy-10,hp:100,side:-1,name:'DOG',emoji:'🐶'}];
+ terrain=[];
+ const s=stages[stage];
+ terrain.push({x:0,y:gy},{x:W,y:gy});
+}
+function initAudio(){
+ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+ if(audioCtx.state==='suspended')audioCtx.resume();
+}
+function tone(freq,dur,type='sine',gain=.05){
+ if(!soundOn)return;
+ initAudio(); const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+ o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(gain,audioCtx.currentTime);
+ g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);
+ o.connect(g).connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur);
+}
+function noise(dur=.12,gain=.08){
+ if(!soundOn)return;initAudio();
+ const n=audioCtx.createBufferSource(),b=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
+ const a=b.getChannelData(0);for(let i=0;i<a.length;i++)a[i]=(Math.random()*2-1)*(1-i/a.length);
+ const g=audioCtx.createGain();g.gain.value=gain;n.buffer=b;n.connect(g).connect(audioCtx.destination);n.start();
+}
+function playShoot(){tone(150,.12,'sawtooth',.08);setTimeout(()=>tone(90,.12,'square',.04),45)}
+function playHit(){noise(.18,.12);tone(70,.18,'square',.06)}
+function playWin(){[440,554,659,880].forEach((f,i)=>setTimeout(()=>tone(f,.16,'sine',.06),i*100))}
+function playClick(){tone(520,.05,'sine',.04)}
+
+function newWind(){
+ wind=Math.round((Math.random()*2-1)*10);
+ ui.wind.textContent='WIND '+(wind>=0?'→ ':'← ')+Math.abs(wind);
+ tone(330,.07,'triangle',.03);
+}
+function setStage(n){
+ stage=n%stages.length;ui.stage.textContent='STAGE '+(stage+1)+' — '+stages[stage].name;
+ layout();newWind();
+}
+function reset(){
+ gameOver=false;turn=0;ball=null;particles=[];powerShot=false;
+ layout();P[0].hp=P[1].hp=100;newWind();updateUI();
+ ui.msg.textContent='';ui.power.style.display='none';
+}
+function updateUI(){
+ ui.hp1.style.width=P[0].hp+'%';ui.hp2.style.width=P[1].hp+'%';
+ ui.turn.textContent=gameOver?'GAME OVER':(turn===0?"CAT'S TURN":"DOG'S TURN");
+ const it=items[ui.item.value];ui.info.innerHTML='🎯 '+it.name+' • '+it.dmg+' DMG'+(it.splash?' • SPLASH':'')+(it.slow?' • SLOW':'');
+}
+function sky(){
+ const s=stages[stage],g=ctx.createLinearGradient(0,0,0,H);
+ g.addColorStop(0,s.sky[0]);g.addColorStop(1,s.sky[1]);ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ // sun/moon
+ ctx.globalAlpha=.75;ctx.fillStyle=stage===2?'#fff':'#ffe9a8';ctx.beginPath();ctx.arc(W*.78,H*.2,stage===2?34:40,0,7);ctx.fill();ctx.globalAlpha=1;
+ // hills
+ ctx.fillStyle=stage===2?'#33436d':'#8bb68a';ctx.beginPath();ctx.moveTo(0,H*.75);ctx.lineTo(W*.16,H*.49);ctx.lineTo(W*.34,H*.63);ctx.lineTo(W*.55,H*.45);ctx.lineTo(W*.72,H*.62);ctx.lineTo(W,H*.48);ctx.lineTo(W,H*.75);ctx.closePath();ctx.fill();
+ ctx.fillStyle=stages[stage].ground;ctx.fillRect(0,H*.75,W,H*.25);
+ // decorative bushes/crates
+ for(let x=20;x<W;x+=90){ctx.fillStyle=stage===3?'#8a6a42':'#3f7b42';ctx.beginPath();ctx.arc(x,H*.75-8,15,0,7);ctx.fill()}
+ // central obstacle
+ let wx=W*stages[stage].wall;
+ if(stage===2){ctx.fillStyle='#718096';ctx.fillRect(wx-32,H*.75-170,64,170);ctx.fillStyle='#a0aec0';ctx.fillRect(wx-5,H*.75-170,10,170)}
+ else {ctx.fillStyle=stage===1?'#92704b':'#a99568';ctx.fillRect(wx-32,H*.75-155,64,155);ctx.fillStyle='#d7c38b';ctx.fillRect(wx-28,H*.75-155,9,155)}
+}
+function drawChar(p){
+ ctx.save();ctx.translate(p.x,p.y);
+ const flip=p.side;
+ ctx.scale(flip,1);
+ // shadow
+ ctx.fillStyle='#0004';ctx.beginPath();ctx.ellipse(0,7,34,8,0,0,7);ctx.fill();
+ // body
+ ctx.fillStyle=p.side===1?'#2c9bd6':'#e85d5d';ctx.beginPath();ctx.roundRect(-23,-48,46,43,12);ctx.fill();
+ // belly
+ ctx.fillStyle='#ffffff33';ctx.beginPath();ctx.ellipse(7,-26,14,18,0,0,7);ctx.fill();
+ // head
+ ctx.fillStyle=p.side===1?'#35a9e0':'#f06a63';ctx.beginPath();ctx.roundRect(-28,-82,56,40,14);ctx.fill();
+ // ears
+ ctx.beginPath();ctx.moveTo(-23,-78);ctx.lineTo(-34,-98);ctx.lineTo(-9,-85);ctx.fill();
+ ctx.beginPath();ctx.moveTo(12,-85);ctx.lineTo(31,-98);ctx.lineTo(24,-73);ctx.fill();
+ // eyes
+ ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-10,-64,7,0,7);ctx.arc(11,-64,7,0,7);ctx.fill();
+ ctx.fillStyle='#172033';ctx.beginPath();ctx.arc(-8,-63,3,0,7);ctx.arc(13,-63,3,0,7);ctx.fill();
+ // nose/mouth
+ ctx.fillStyle='#202020';ctx.beginPath();ctx.arc(3,-53,4,0,7);ctx.fill();
+ ctx.strokeStyle='#202020';ctx.lineWidth=2;ctx.beginPath();ctx.arc(3,-51,9,0,Math.PI);ctx.stroke();
+ // legs
+ ctx.fillStyle='#253047';ctx.fillRect(-17,-5,11,12);ctx.fillRect(7,-5,11,12);
+ // arm aiming
+ ctx.strokeStyle='#253047';ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(18,-32);ctx.lineTo(39,-42);ctx.stroke();
+ ctx.restore();
+}
+function drawBall(b){
+ const it=items[b.kind];ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.rot||0);
+ if(b.kind==='bomb'){ctx.fillStyle=it.color;ctx.beginPath();ctx.arc(0,0,12,0,7);ctx.fill();ctx.fillStyle='#fbbf24';ctx.fillRect(-2,-16,4,6)}
+ else if(b.kind==='boomer'){ctx.strokeStyle=it.color;ctx.lineWidth=7;ctx.beginPath();ctx.arc(0,0,14,-1.0,1.0);ctx.stroke()}
+ else {ctx.fillStyle=it.color;ctx.beginPath();ctx.arc(0,0,b.kind==='can'?9:10,0,7);ctx.fill();ctx.fillStyle='#fff8';ctx.beginPath();ctx.arc(-3,-3,3,0,7);ctx.fill()}
+ ctx.restore();
+}
+function drawAim(){
+ if(!drag||turn!==0||gameOver)return;
+ ctx.save();ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.setLineDash([7,7]);
+ ctx.beginPath();ctx.moveTo(P[0].x,P[0].y-45);ctx.lineTo(aim.x,aim.y);ctx.stroke();ctx.setLineDash([]);
+ const len=Math.min(190,Math.hypot(aim.x-P[0].x,aim.y-(P[0].y-45)));
+ ctx.fillStyle='#fff';ctx.font='bold 12px system-ui';ctx.fillText(Math.round(len/190*100)+'%',aim.x+10,aim.y-8);ctx.restore();
+}
+function spawnParticles(x,y,type='hit'){
+ for(let i=0;i<(type==='hit'?28:14);i++){
+  let a=Math.random()*Math.PI*2,s=2+Math.random()*6;
+  particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-2,life:1,kind:type});
+ }
+}
+function damage(target,amount){
+ target.hp=Math.max(0,target.hp-amount);updateUI();playHit();shake=8;
+ if(target.hp<=0){
+  gameOver=true;ui.msg.textContent=(target===P[1]?'🐱 CAT WINS!':'🐶 DOG WINS!');
+  playWin();spawnParticles(target.x,target.y-45,'win');
+  return;
+ }
+}
+function fire(owner,aimX,aimY,forcedKind=null,forcedPower=null){
+ const p=P[owner],kind=forcedKind||ui.item.value,it=items[kind];
+ let dx=aimX-p.x,dy=aimY-(p.y-45),len=Math.hypot(dx,dy);if(len<10)return;
+ let power=forcedPower??Math.min(len,200)/200;
+ let speed=(6+power*15)/it.mass;
+ ball={x:p.x,y:p.y-45,vx:dx/len*speed,vy:dy/len*speed,owner,kind,life:0,rot:0,power};
+ playShoot();ui.power.style.display='none';powerShot=false;
+}
+function aiFire(){
+ if(gameOver)return;
+ let p=P[1],target=P[0];
+ // approximate aim with a little randomness
+ let tx=target.x+(Math.random()-0.5)*45,ty=target.y-45;
+ let dx=tx-p.x,dy=ty-(p.y-45),len=Math.hypot(dx,dy);
+ let power=.65+Math.random()*.28;
+ fire(1,tx,ty,['rock','can','bomb','ice'][Math.floor(Math.random()*4)],power);
+}
+function endShot(){
+ if(gameOver)return;
+ if(turn===0){turn=1;updateUI();setTimeout(aiFire,650)}
+ else {turn=0;updateUI()}
+}
+function collision(){
+ if(!ball)return;
+ let target=P[ball.owner===0?1:0];
+ if(Math.hypot(ball.x-target.x,ball.y-(target.y-43))<38){
+   const it=items[ball.kind];damage(target,it.dmg*(powerShot?1.6:1));
+   spawnParticles(ball.x,ball.y,'hit');
+   if(it.splash && !gameOver){
+     const other=P[ball.owner]; if(Math.hypot(ball.x-other.x,ball.y-(other.y-43))<100) damage(other,8);
+   }
+   ball=null;if(!gameOver)endShot();return;
+ }
+ if(ball.y>=H*.75-10){
+   spawnParticles(ball.x,H*.75-10,'dust');ball=null;endShot();
+ }
+}
+function update(){
+ if(ball){
+  ball.vx+=wind*.008;ball.vy+=.29;ball.x+=ball.vx;ball.y+=ball.vy;ball.life++;ball.rot+=.12;
+  if(ball.x<8||ball.x>W-8){ball.x=Math.max(8,Math.min(W-8,ball.x));ball.vx*=-.72}
+  // obstacle
+  const wx=W*stages[stage].wall;
+  if(ball.x>wx-34&&ball.x<wx+34&&ball.y>H*.75-165&&ball.y<H*.75){
+    ball.vx*=-.65;ball.x+=ball.vx*1.2;
+  }
+  collision(); if(ball&&ball.life>600){ball=null;endShot()}
+ }
+ particles.forEach(q=>{q.x+=q.vx;q.y+=q.vy;q.vy+=.2;q.life-=.025});
+ particles=particles.filter(q=>q.life>0);
+ if(shake>0)shake*=.88;if(shake<.3)shake=0;
+}
+function draw(){
+ ctx.save();if(shake)ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
+ sky();
+ // wind streaks
+ ctx.strokeStyle='#fff6';ctx.lineWidth=2;
+ for(let i=0;i<8;i++){let y=90+i*38,x=((performance.now()/25*wind)+(i*151))%W;if(x<0)x+=W;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+35,y);ctx.stroke()}
+ drawChar(P[0]);drawChar(P[1]);drawAim();if(ball)drawBall(ball);
+ particles.forEach(q=>{ctx.globalAlpha=q.life;ctx.fillStyle=q.kind==='win'?'#fde047':q.kind==='dust'?'#c4b08b':'#fff';ctx.beginPath();ctx.arc(q.x,q.y,2+q.life*4,0,7);ctx.fill();ctx.globalAlpha=1});
+ ctx.restore();
+}
+function loop(){update();draw();requestAnimationFrame(loop)}
+function pointerPos(e){let r=C.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+C.addEventListener('pointerdown',e=>{
+ if(!gameStarted||gameOver||turn!==0)return;
+ let q=pointerPos(e);
+ if(Math.hypot(q.x-P[0].x,q.y-(P[0].y-45))<65){
+  drag=true;aim=q;C.setPointerCapture(e.pointerId);ui.power.style.display='block';playClick();
+ }
+});
+C.addEventListener('pointermove',e=>{
+ if(!drag)return;aim=pointerPos(e);
+ let len=Math.min(200,Math.hypot(aim.x-P[0].x,aim.y-(P[0].y-45)));
+ ui.pf.style.width=(len/200*100)+'%';
+});
+C.addEventListener('pointerup',e=>{
+ if(!drag)return;drag=false;
+ if(Math.hypot(aim.x-P[0].x,aim.y-(P[0].y-45))>12)fire(0,aim.x,aim.y);
+});
+document.getElementById('start').onclick=()=>{
+ initAudio();gameStarted=true;document.getElementById('help').style.display='none';reset();playClick();
+};
+document.getElementById('restart').onclick=()=>{initAudio();reset();playClick()};
+document.getElementById('windBtn').onclick=()=>{initAudio();newWind()};
+document.getElementById('special').onclick=()=>{if(turn===0&&!gameOver){powerShot=true;ui.msg.textContent='⚡ POWER SHOT พร้อม! ลากเพื่อยิง';tone(700,.15,'triangle',.05)}};
+document.getElementById('sound').onclick=e=>{soundOn=!soundOn;e.target.textContent=soundOn?'🔊 SOUND ON':'🔇 SOUND OFF';if(soundOn){initAudio();playClick()}};
+document.getElementById('item').onchange=()=>{updateUI();playClick()};
+window.addEventListener('resize',resize);
+resize();setStage(0);updateUI();loop();
+</script>
+</body>
+</html>
